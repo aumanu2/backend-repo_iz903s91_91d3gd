@@ -1,6 +1,8 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from typing import Optional
 
 app = FastAPI()
 
@@ -63,6 +65,42 @@ def test_database():
     response["database_name"] = "✅ Set" if os.getenv("DATABASE_NAME") else "❌ Not Set"
     
     return response
+
+@app.post("/api/upload")
+async def upload_bot_code(
+    file: UploadFile = File(...),
+    team: Optional[str] = Form(None),
+    email: Optional[str] = Form(None),
+):
+    """Receive a bot code file and store it in MongoDB."""
+    try:
+        contents = await file.read()
+        size = len(contents)
+        if size == 0:
+            raise HTTPException(status_code=400, detail="Empty file uploaded")
+
+        from database import create_document
+
+        doc = {
+            "team": team,
+            "email": email,
+            "filename": file.filename,
+            "content_type": file.content_type or "application/octet-stream",
+            "size": size,
+            "file_data": contents,
+        }
+
+        inserted_id = create_document("botcode", doc)
+        return JSONResponse({
+            "status": "success",
+            "id": inserted_id,
+            "filename": file.filename,
+            "size": size
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
